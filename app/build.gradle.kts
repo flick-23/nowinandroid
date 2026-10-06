@@ -60,8 +60,27 @@ android {
         resources {
             excludes.add("/META-INF/{AL2.0,LGPL2.1}")
         }
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
-    testOptions.unitTests.isIncludeAndroidResources = true
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        backupTests {
+            create("backupTest") {
+                backupTestLibraryVersion = "1.0.0-alpha01"
+                targetVariants.add("demoDebug")
+                hostJar {
+                    dependencies {
+                        // backup-host only has adblib at runtime, but BackupRestoreExtension(adbSession)
+                        // and the tests' own device checks need it at compile time. A fix has been deployed andthis will be available transitively from alpha03 version of backuptests
+                        implementation.add("com.android.tools.adblib:adblib:9.5.0-alpha03")
+                        implementation.add("com.android.tools.adblib:adblib-tools:9.5.0-alpha03")
+                    }
+                }
+            }
+        }
+    }
     namespace = "com.google.samples.apps.nowinandroid"
 }
 
@@ -147,4 +166,16 @@ baselineProfile {
 
 dependencyGuard {
     configuration("prodReleaseRuntimeClasspath")
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperties(providers.systemPropertiesPrefixedBy("androidx.test.backup.device.").get())
+}
+
+// The backup test suite adds androidx.test.backup to every configuration whose name contains the
+// suite name. Keep it off the Kotlin compiler plugin and KSP classpaths, which can't consume an AAR.
+configurations.configureEach {
+    if (name.startsWith("kotlin", ignoreCase = true) || name.startsWith("ksp", ignoreCase = true)) {
+        withDependencies { removeIf { it.group == "androidx.test.backup" } }
+    }
 }
